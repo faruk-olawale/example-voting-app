@@ -4,3 +4,30 @@ bin/
 obj/
 .vs/
 node_modules/
+
+# Secrets & Keys
+*.pem
+*.key
+*.cert
+*.id_rsa
+.env
+.env.*
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!terraform.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

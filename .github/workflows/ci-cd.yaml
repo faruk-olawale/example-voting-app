@@ -1,0 +1,167 @@
+name: CI/CD Pipeline - DevOps Capstone 1
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # -----------------------------------------------------------
+  # 1. Automated Tests (Unit & Linting)
+  # -----------------------------------------------------------
+  test:
+    name: Run Automated Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python Dependencies & Run Vote Tests
+        run: |
+          pip install --upgrade pip
+          pip install -r vote/requirements.txt pytest
+          cd vote
+          pytest tests/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: result/package-lock.json
+
+      - name: Install Node Dependencies & Run Result Tests
+        run: |
+          cd result
+          npm ci
+          npm test
+
+  # -----------------------------------------------------------
+  # 2. Security Vulnerability Scan (Aqua Security Trivy)
+  # -----------------------------------------------------------
+  security-scan:
+    name: Security Vulnerability Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy Repository & Config Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          ignore-unfixed: true
+          format: "table"
+          severity: "CRITICAL,HIGH"
+
+  # -----------------------------------------------------------
+  # 3. Helm Chart Validation
+  # -----------------------------------------------------------
+  helm-lint:
+    name: Helm Chart Lint & Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.15.4"
+
+      - name: Lint Helm Chart
+        run: |
+          helm lint charts/voting-app
+          helm template test-release charts/voting-app > /dev/null
+
+  # -----------------------------------------------------------
+  # 4. Container Build, Scan & Push (Tagged with Git SHA)
+  # -----------------------------------------------------------
+  build-and-push:
+    name: Build, Scan & Push Images
+    runs-on: ubuntu-latest
+    needs: [test, security-scan, helm-lint]
+    strategy:
+      matrix:
+        service:
+          - name: vote
+            context: ./vote
+            dockerfile: ./vote/Dockerfile
+          - name: result
+            context: ./result
+            dockerfile: ./result/Dockerfile
+          - name: worker
+            context: ./worker
+            dockerfile: ./worker/Dockerfile
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (Tags & Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+            type=sha,format=long
+
+      - name: Build Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}:${{ github.sha }}
+
+      - name: Trivy Container Image Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}:${{ github.sha }}
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Push Container Image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

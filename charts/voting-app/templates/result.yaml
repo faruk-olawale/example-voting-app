@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result
+  labels:
+    app: result
+    {{- include "voting-app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.result.replicaCount }}
+  selector:
+    matchLabels:
+      app: result
+  template:
+    metadata:
+      labels:
+        app: result
+    spec:
+      containers:
+      - name: result
+        image: "{{ .Values.result.image.repository }}:{{ .Values.result.image.tag }}"
+        imagePullPolicy: {{ .Values.result.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.result.service.targetPort }}
+          name: result
+        env:
+        - name: PORT
+          value: {{ .Values.result.service.targetPort | quote }}
+        resources:
+          {{- toYaml .Values.result.resources | nindent 10 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: result
+  labels:
+    app: result
+    {{- include "voting-app.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.result.service.type }}
+  ports:
+  - name: "result-service"
+    port: {{ .Values.result.service.port }}
+    targetPort: {{ .Values.result.service.targetPort }}
+    {{- if eq .Values.result.service.type "NodePort" }}
+    nodePort: {{ .Values.result.service.nodePort }}
+    {{- end }}
+  selector:
+    app: result

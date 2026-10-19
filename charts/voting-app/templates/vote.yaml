@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote
+  labels:
+    app: vote
+    {{- include "voting-app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.vote.replicaCount }}
+  selector:
+    matchLabels:
+      app: vote
+  template:
+    metadata:
+      labels:
+        app: vote
+    spec:
+      containers:
+      - name: vote
+        image: "{{ .Values.vote.image.repository }}:{{ .Values.vote.image.tag }}"
+        imagePullPolicy: {{ .Values.vote.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.vote.service.targetPort }}
+          name: vote
+        env:
+        - name: OPTION_A
+          value: {{ .Values.vote.env.optionA | quote }}
+        - name: OPTION_B
+          value: {{ .Values.vote.env.optionB | quote }}
+        resources:
+          {{- toYaml .Values.vote.resources | nindent 10 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote
+  labels:
+    app: vote
+    {{- include "voting-app.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.vote.service.type }}
+  ports:
+  - name: "vote-service"
+    port: {{ .Values.vote.service.port }}
+    targetPort: {{ .Values.vote.service.targetPort }}
+    {{- if eq .Values.vote.service.type "NodePort" }}
+    nodePort: {{ .Values.vote.service.nodePort }}
+    {{- end }}
+  selector:
+    app: vote
