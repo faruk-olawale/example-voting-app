@@ -134,7 +134,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{ matrix.service.name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=short,prefix=sha-
@@ -146,12 +146,12 @@ jobs:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           load: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}:${{ github.sha }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{ matrix.service.name }}:${{ github.sha }}
 
       - name: Trivy Container Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{{ matrix.service.name }}}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/voting-app-${{ matrix.service.name }}:${{ github.sha }}
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
