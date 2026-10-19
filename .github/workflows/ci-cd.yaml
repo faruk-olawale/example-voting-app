@@ -39,7 +39,7 @@ jobs:
           pip install --upgrade pip
           pip install -r vote/requirements.txt pytest
           cd vote
-          pytest tests/
+          python -m pytest tests/
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
